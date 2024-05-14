@@ -7,7 +7,7 @@ cxx = meson.get_compiler('cpp')
 args = []
 
 zlib = dependency('zlib')  # (is already a SpiderMonkey dependency)
-spidermonkey = dependency('mozjs-124a1')
+spidermonkey = dependency('mozjs-127a1')
 readline = cxx.find_library('readline')
 
 # Check if SpiderMonkey was compiled with --enable-debug. If this is the case,

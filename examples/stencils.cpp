@@ -22,8 +22,12 @@
 // compilation errors, otherwise it does no error handling and simply exits
 // if something goes wrong.
 //
-// To reuse Stencils in multiple threads, you must create a JS::FrontendContext
-// in each thread that compiles Javascript.
+// To reuse Stencils in multiple threads, you should create a
+// JS::FrontendContext in each thread that compiles Javascript. Alternatively,
+// you can pass JS::FrontendContext between threads, with the following
+// restrictions: JS::SetNativeStackQuota must be called in the thread that is
+// going to use the frontend context; the frontend context shouldn't be used
+// concurrently
 
 // Helper output
 static std::ostream &labeled_cout() {
@@ -123,7 +127,6 @@ RefPtr<JS::Stencil> Job::compile_script(JSContext *cx,
 
   JS::CompileOptions opts(cx);
   opts.setFileAndLine(filename, linenumber);
-  opts.setNonSyntacticScope(true);
 
   if (!source.init(_fc, script.c_str(), script.size(),
                    JS::SourceOwnership::Borrowed)) {
@@ -133,9 +136,7 @@ RefPtr<JS::Stencil> Job::compile_script(JSContext *cx,
     return nullptr;
   }
 
-  JS::CompilationStorage compileStorage;
-  RefPtr<JS::Stencil> st =
-      JS::CompileGlobalScriptToStencil(_fc, opts, source, compileStorage);
+  RefPtr<JS::Stencil> st = JS::CompileGlobalScriptToStencil(_fc, opts, source);
 
   if (st == nullptr) {
     labeled_cout()

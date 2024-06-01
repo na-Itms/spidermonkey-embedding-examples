@@ -22,7 +22,7 @@ The main types of GC thing pointer are:
 - `JS::Symbol*`
 
 Note that `JS::Value` and `JS::PropertyKey` can contain pointers internally even
-though they are normal pointer types, hence their inclusion in this
+though they are not normal pointer types, hence their inclusion in this
 list.
 
 If you use these types directly, or create classes, structs or arrays

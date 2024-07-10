@@ -153,7 +153,7 @@ static bool EmbeddingRootExample(JSContext* cx) {
 // struct can reach a GC pointer.
 
 struct CustomObject {
-  enum Slots { BoxSlot, SlotCount }; // Store box in reserved slot 0.
+  enum Slots { OwnedBoxSlot, UnownedBoxSlot, SlotCount };
 
   // When the CustomObject is collected, delete the stored box.
   static void finalize(JS::GCContext* gcx, JSObject* obj);
@@ -177,7 +177,7 @@ struct CustomObject {
           JSCLASS_HAS_RESERVED_SLOTS(SlotCount) | JSCLASS_FOREGROUND_FINALIZE,
       .cOps = &classOps};
 
-  static JSObject* create(JSContext* cx, SafeBox* storedBox);
+  static JSObject* create(JSContext* cx, SafeBox* ownedBox1, SafeBox* unownedBox2);
 
   // Full type of JSObject is not known, so we can't inherit.
   static CustomObject* fromObject(JSObject* obj) {
@@ -187,28 +187,42 @@ struct CustomObject {
     return reinterpret_cast<JSObject*>(custom);
   }
 
-  // Retrieve the SafeBox* from the reserved slot.
-  SafeBox* box() {
+  // Retrieve the owned SafeBox* from the reserved slot.
+  SafeBox* ownedBox() {
     JSObject* obj = CustomObject::asObject(this);
-    return static_cast<SafeBox*>(JS::GetReservedSlot(obj, BoxSlot).toPrivate());
+    return static_cast<SafeBox*>(JS::GetReservedSlot(obj, OwnedBoxSlot).toPrivate());
+  }
+
+  // Retrieve the unowned SafeBox* from the reserved slot.
+  SafeBox* unownedBox() {
+    JSObject* obj = CustomObject::asObject(this);
+    return static_cast<SafeBox*>(JS::GetReservedSlot(obj, UnownedBoxSlot).toPrivate());
   }
 };
 
-JSObject* CustomObject::create(JSContext* cx, SafeBox* storedBox) {
+JSObject* CustomObject::create(JSContext* cx, SafeBox* box1, SafeBox* box2) {
   JS::Rooted<JSObject*> obj(cx, JS_NewObject(cx, &clasp));
   if (!obj) {
     return nullptr;
   }
-  JS_SetReservedSlot(obj, BoxSlot, JS::PrivateValue(storedBox));
+  JS_SetReservedSlot(obj, OwnedBoxSlot, JS::PrivateValue(box1));
+  JS_SetReservedSlot(obj, UnownedBoxSlot, JS::PrivateValue(box2));
   return obj;
 }
 
 void CustomObject::finalize(JS::GCContext* gcx, JSObject* obj) {
-  delete CustomObject::fromObject(obj)->box();
+  delete CustomObject::fromObject(obj)->ownedBox();
+  // Do NOT delete unownedBox().
 }
 
 void CustomObject::trace(JSTracer* trc, JSObject* obj) {
-  SafeBox* b = CustomObject::fromObject(obj)->box();
+  // Must trace both boxes, owned or not, in order to keep any referred-to GC
+  // things alive.
+  SafeBox* b = CustomObject::fromObject(obj)->ownedBox();
+  if (b) {
+    b->trace(trc);
+  }
+  b = CustomObject::fromObject(obj)->unownedBox();
   if (b) {
     b->trace(trc);
   }
@@ -223,7 +237,8 @@ static bool CustomObjectExample(JSContext* cx) {
   JSAutoRealm ar(cx, global);
 
   SafeBox* box = new SafeBox();
-  JSObject* obj = CustomObject::create(cx, box);
+  static SafeBox eternalBox{};
+  JSObject* obj = CustomObject::create(cx, box, &eternalBox);
   if (!obj) {
     return false;
   }

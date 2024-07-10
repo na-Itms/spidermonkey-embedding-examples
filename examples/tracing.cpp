@@ -190,13 +190,13 @@ struct CustomObject {
   // Retrieve the owned SafeBox* from the reserved slot.
   SafeBox* ownedBox() {
     JSObject* obj = CustomObject::asObject(this);
-    return static_cast<SafeBox*>(JS::GetReservedSlot(obj, OwnedBoxSlot).toPrivate());
+    return JS::GetMaybePtrFromReservedSlot<SafeBox>(obj, OwnedBoxSlot);
   }
 
   // Retrieve the unowned SafeBox* from the reserved slot.
   SafeBox* unownedBox() {
     JSObject* obj = CustomObject::asObject(this);
-    return static_cast<SafeBox*>(JS::GetReservedSlot(obj, UnownedBoxSlot).toPrivate());
+    return JS::GetMaybePtrFromReservedSlot<SafeBox>(obj, UnownedBoxSlot);
   }
 };
 

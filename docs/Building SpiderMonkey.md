@@ -5,7 +5,7 @@ Use these instructions to build your own copy of SpiderMonkey.
 ## Prerequisites ##
 
 You will need a **C++ compiler** that can handle the C++17 standard,
-**Rust** version [1.66][minimum-rust-version] or later, **GNU Make**,
+**Rust** version [1.76][minimum-rust-version] or later, **GNU Make**,
 **zlib**, and **libffi**.
 These can usually be installed with a package manager.
 
@@ -16,16 +16,16 @@ These can usually be installed with a package manager.
 > `--with-system-icu` in the build instructions below, for a shorter
 > build time.
 
-[minimum-rust-version]: https://searchfox.org/mozilla-esr115/rev/61b47de1faebf23626e519b2464b461589fbea3e/python/mozboot/mozboot/util.py#14
-[minimum-icu-version]: https://searchfox.org/mozilla-esr115/rev/61b47de1faebf23626e519b2464b461589fbea3e/js/moz.configure#1107
+[minimum-rust-version]: https://searchfox.org/mozilla-esr128/rev/2d28d1b9e757a35095de45c818a0432e031f339d/python/mozboot/mozboot/util.py#14
+[minimum-icu-version]: https://searchfox.org/mozilla-esr128/rev/2d28d1b9e757a35095de45c818a0432e031f339d/js/moz.configure#1308
 
 ## Getting the source code ##
 
 Currently, the most reliable way to get the SpiderMonkey source code is
 to download the Firefox source.
-At the time of writing, the latest source for Firefox ESR 115, which
-contains the source for SpiderMonkey ESR 115, can be found here:
-https://ftp.mozilla.org/pub/firefox/releases/115.1.0esr/source/
+At the time of writing, the latest source for Firefox ESR 128, which
+contains the source for SpiderMonkey ESR 128, can be found here:
+https://ftp.mozilla.org/pub/firefox/releases/128.1.0esr/source/
 
 The ESR releases have a major release approximately once a year with
 security patches released throughout the year.

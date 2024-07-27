@@ -1,4 +1,4 @@
-project('spidermonkey-embedding-examples', 'cpp', version: 'esr115',
+project('spidermonkey-embedding-examples', 'cpp', version: 'esr128',
     meson_version: '>= 0.43.0',
     default_options: ['cpp_std=c++20', 'warning_level=3'])
 
@@ -7,7 +7,7 @@ cxx = meson.get_compiler('cpp')
 args = []
 
 zlib = dependency('zlib')  # (is already a SpiderMonkey dependency)
-spidermonkey = dependency('mozjs-127a1')
+spidermonkey = dependency('mozjs-128')
 readline = cxx.find_library('readline')
 
 # Check if SpiderMonkey was compiled with --enable-debug. If this is the case,

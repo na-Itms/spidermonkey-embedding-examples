@@ -6,6 +6,7 @@
 #include <mozilla/Unused.h>
 
 #include <js/Array.h>
+#include <js/ColumnNumber.h>
 #include <js/CompilationAndEvaluation.h>
 #include <js/Conversions.h>
 #include <js/Initialization.h>
@@ -352,9 +353,10 @@ static bool ThrowValue(JSContext* cx, JS::HandleValue exc) {
  *
  * return ThrowError(cx, global, message, __FILE__, __LINE__, column);
  */
-static bool ThrowError(JSContext* cx, JS::HandleObject global,
-                       const char* message, const char* filename,
-                       int32_t lineno, int32_t colno = 0) {
+static bool ThrowError(
+    JSContext* cx, JS::HandleObject global, const char* message,
+    const char* filename, int32_t lineno,
+    JS::ColumnNumberOneOrigin colno = JS::ColumnNumberOneOrigin{1}) {
   JS::RootedString messageStr(cx, JS_NewStringCopyZ(cx, message));
   if (!messageStr) return false;
   JS::RootedString filenameStr(cx, JS_NewStringCopyZ(cx, filename));

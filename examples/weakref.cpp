@@ -118,6 +118,9 @@ class CustomJobQueue : public JS::JobQueue {
   // JS::JobQueue override
   bool empty() const override { return m_queue.empty(); }
 
+  // JS::JobQueue override
+  bool isDrainingStopped() const override { return !m_draining; }
+
   void queueFinalizationRegistryCallback(JSFunction* callback) {
     mozilla::Unused << m_finalizationRegistryCallbacks.append(callback);
   }
@@ -247,16 +250,12 @@ static bool WeakRefExample(JSContext* cx) {
   JS::SetHostCleanupFinalizationRegistryCallback(
       cx, CleanupFinalizationRegistry, &jobQueue);
 
-  JS::RealmOptions options;
-  options.creationOptions().setWeakRefsEnabled(
-      JS::WeakRefSpecifier::EnabledWithoutCleanupSome);
-
   static JSClass GlobalClass = {"WeakRefsGlobal", JSCLASS_GLOBAL_FLAGS,
                                 &JS::DefaultGlobalClassOps};
 
   JS::Rooted<JSObject*> global{
       cx, JS_NewGlobalObject(cx, &GlobalClass, nullptr, JS::FireOnNewGlobalHook,
-                             options)};
+                             JS::RealmOptions{})};
   if (!global) return false;
 
   JSAutoRealm ar{cx, global};

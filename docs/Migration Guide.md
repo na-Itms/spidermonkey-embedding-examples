@@ -3,6 +3,157 @@
 This document describes how to port your code from using one ESR version
 of SpiderMonkey to the next ESR version.
 
+## ESR 115 to ESR 128 ##
+
+### New API for column numbers ###
+
+Previously, column numbers (in source locations and stack frames) were
+stored as mostly as numbers starting from 0.
+When column numbers are shown in a user-facing context, however, they
+are usually displayed as starting at 1.
+SpiderMonkey has changed the internal representation of column numbers
+to start at 1 as well.
+There is a new set of APIs in `<js/ColumnNumber.h>` that allows
+explicitly converting from 1-origin to 0-origin in order to avoid
+confusion, and handles tagged column numbers from WASM frames.
+
+**Recommendation:** You will need to use the new column number API if
+you obtain a column number from any stack frame API such as
+`JS::GetSavedFrameColumn()`.
+Example:
+
+```c++
+// old
+uint32_t column;
+if (JS::GetSavedFrameColumn(cx, nullptr, frame, &column) != JS::SavedFrameResult::Ok)
+  return false;
+std::cout << "column number " << column + 1;
+
+// new
+JS::TaggedColumnNumberOneOrigin tagged_column;
+if (JS::GetSavedFrameColumn(cx, nullptr, frame, &tagged_column) != JS::SavedFrameResult::Ok)
+  return false;
+std::cout << "column number " << tagged_column.oneOriginValue();
+```
+
+The function `JS::CreateError()` takes a `JS::ColumnNumberOneOrigin`
+which is different from `JS::TaggedColumnNumberOneOrigin`.
+The "tagged" type exists to accommodate WASM frames, which have a
+function index instead of a column number.
+
+If you don't have WASM frames, you can convert the tagged column to an
+untagged column number using:
+```c++
+JS::ColumnNumberOneOrigin{tagged_column.toLimitedColumnNumber()};
+```
+This will assert that the column number is not tagged as a WASM function
+index.
+If you have WASM frames, you'll need to handle those separately.
+
+See [bug 1847469](https://bugzilla.mozilla.org/show_bug.cgi?id=1847469).
+
+### New API for ArrayBuffer buffers ###
+
+ArrayBuffer APIs that take data buffers from the embedding, such as
+`JS::NewExternalArrayBuffer()` and `JS::NewArrayBufferWithContents()`,
+now take a `mozilla::UniquePtr&&` argument for the data buffer.
+
+**Recommendation:** This is a fairly straightforward migration, in which
+you can just put your data buffer into a UniquePtr and then
+`std::move()` it into the ArrayBuffer.
+If you previously passed a free callback, use that callback as the
+deleter argument to the UniquePtr.
+Examples:
+
+```c++
+// old
+JS::RootedObject array_buffer{cx, JS::NewExternalArrayBuffer(
+  cx, len, my_struct->buffer, my_buffer_free_func, my_struct)};
+
+// new
+mozilla::UniquePtr<void, JS::BufferContentsDeleter> contents{
+  my_struct->buffer, {my_buffer_free_func, my_struct}};
+JS::RootedObject array_buffer{cx, JS::NewExternalArrayBuffer(
+  cx, len, std::move(contents))};
+```
+
+### `JS::GCPolicy::needsSweep()` ###
+
+`JS::GCPolicy<T>` has a new method, `needsSweep()`.
+It is like a const version of `JS::GCPolicy::traceWeak()`, but the sense
+of the boolean return value is reversed.
+(Returns true if the weak pointer is dead, and false if it is live.)
+The argument is const, so the method will not be called if the pointer
+needs to move.
+Implementing the method is optional.
+
+**Recommendation:** If you have specialized `JS::GCPolicy` for any of
+your classes, consider whether you need to implement this method.
+If your class has a weak pointer, you probably do.
+
+Also, note that `JS::GCPolicy<JS::Heap<T>>` does not implement
+`needsSweep()`.
+If you were storing a `JS::Heap` inside `JS::WeakCache<T>`, you will
+need to use a different data structure.
+An easy drop-in replacement for `JS::Heap` suitable for this purpose
+would be something like this:
+
+```c++
+template <typename T>
+class WeakPtr : public JS::Heap<T> {
+ public:
+  using JS::Heap<T>::Heap;
+  using JS::Heap<T>::operator=;
+};
+
+namespace JS {
+
+template <typename T>
+struct GCPolicy<WeakPtr<T>> {
+  static void trace(JSTracer* trc, WeakPtr<T>* thingp, const char* name) {
+    return JS::TraceEdge(trc, thingp, name);
+  }
+
+  static bool traceWeak(JSTracer* trc, WeakPtr<T>* thingp) {
+    return js::gc::TraceWeakEdge(trc, thingp);
+  }
+
+  static bool needsSweep(JSTracer* trc, const WeakPtr<T>* thingp) {
+    WeakPtr<T> thing{*thingp};
+    return !js::gc::TraceWeakEdge(trc, &thing);
+  }
+};
+
+}  // namespace JS
+```
+
+### Getting Function IDs ###
+
+`JS_GetFunctionId()` and `JS_GetFunctionDisplayId()` now require a
+JSContext.
+There are now alternatives that don't take a JSContext parameter, but
+avoid computing the full function name with "`get `" or "`set `" prefix
+for accessors: `JS_GetMaybePartialFunctionId()` and
+`JS_GetMaybePartialFunctionDisplayId()`.
+
+**Recommendation:** The fact that these APIs didn't require a JSContext
+meant they were convenient to use for log output or debugging.
+If you were using them for this purpose, switch to the `MaybePartial`
+alternatives.
+Otherwise, just adapt to the new signature.
+
+### Various API changes ###
+
+This is a non-exhaustive list of minor API changes and renames.
+
+- The type of `JSErrorBase::filename()` is now `JS::ConstUTF8CharsZ`
+  instead of a C string, so when using `JSErrorReport` you will need to
+  use `.c_str()` if you still need the C string.
+- Several runtime flags for new features in `JS::RealmCreationOptions`
+  are enabled unconditionally, so the flags are removed.
+- Classes that extend `JS::JobQueue` must now implement
+  `JS::JobQueue::isDrainingStopped()`, which is an abstract method.
+
 ## ESR 102 to ESR 115 ##
 
 ### More Versatile `JS_InitClass` ###

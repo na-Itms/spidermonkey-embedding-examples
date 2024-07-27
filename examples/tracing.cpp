@@ -1,14 +1,18 @@
 #include <memory>
 #include <vector>
 
+#include <js/Object.h>
 #include <jsapi.h>
 
 #include "boilerplate.h"
 
 // This example illustrates how to safely store GC pointers in the embedding's
-// data structures by implementing appropriate tracing mechanisms. This example
-// covers using strong references where C++ keeps the JS objects alive. Weak
-// references use a different implementation strategy that is not covered here.
+// data structures, and vice versa, by implementing appropriate tracing
+// mechanisms.
+//
+// This example covers using strong references where C++ keeps the JS objects
+// alive. Weak references use a different implementation strategy that is not
+// covered here.
 
 ////////////////////////////////////////////////////////////
 
@@ -144,6 +148,109 @@ static bool EmbeddingRootExample(JSContext* cx) {
 
 ////////////////////////////////////////////////////////////
 
+// The other way around: to store a pointer to a C++ struct from a JS object,
+// use a JSClass with a trace hook. Note that this is only required if the C++
+// struct can reach a GC pointer.
+
+struct CustomObject {
+  enum Slots { OwnedBoxSlot, UnownedBoxSlot, SlotCount };
+
+  // When the CustomObject is collected, delete the stored box.
+  static void finalize(JS::GCContext* gcx, JSObject* obj);
+
+  // When a CustomObject is traced, it must trace the stored box.
+  static void trace(JSTracer* trc, JSObject* obj);
+
+  static constexpr JSClassOps classOps = {
+      // Use .finalize if CustomObject owns the C++ object and should delete it
+      // when the CustomObject dies.
+      .finalize = finalize,
+
+      // Use .trace whenever the JS object points to a C++ object that can reach
+      // other JS objects.
+      .trace = trace
+  };
+
+  static constexpr JSClass clasp = {
+      .name = "Custom",
+      .flags =
+          JSCLASS_HAS_RESERVED_SLOTS(SlotCount) | JSCLASS_FOREGROUND_FINALIZE,
+      .cOps = &classOps};
+
+  static JSObject* create(JSContext* cx, SafeBox* ownedBox1, SafeBox* unownedBox2);
+
+  // Full type of JSObject is not known, so we can't inherit.
+  static CustomObject* fromObject(JSObject* obj) {
+    return reinterpret_cast<CustomObject*>(obj);
+  }
+  static JSObject* asObject(CustomObject* custom) {
+    return reinterpret_cast<JSObject*>(custom);
+  }
+
+  // Retrieve the owned SafeBox* from the reserved slot.
+  SafeBox* ownedBox() {
+    JSObject* obj = CustomObject::asObject(this);
+    return JS::GetMaybePtrFromReservedSlot<SafeBox>(obj, OwnedBoxSlot);
+  }
+
+  // Retrieve the unowned SafeBox* from the reserved slot.
+  SafeBox* unownedBox() {
+    JSObject* obj = CustomObject::asObject(this);
+    return JS::GetMaybePtrFromReservedSlot<SafeBox>(obj, UnownedBoxSlot);
+  }
+};
+
+JSObject* CustomObject::create(JSContext* cx, SafeBox* box1, SafeBox* box2) {
+  JS::Rooted<JSObject*> obj(cx, JS_NewObject(cx, &clasp));
+  if (!obj) {
+    return nullptr;
+  }
+  JS_SetReservedSlot(obj, OwnedBoxSlot, JS::PrivateValue(box1));
+  JS_SetReservedSlot(obj, UnownedBoxSlot, JS::PrivateValue(box2));
+  return obj;
+}
+
+void CustomObject::finalize(JS::GCContext* gcx, JSObject* obj) {
+  delete CustomObject::fromObject(obj)->ownedBox();
+  // Do NOT delete unownedBox().
+}
+
+void CustomObject::trace(JSTracer* trc, JSObject* obj) {
+  // Must trace both boxes, owned or not, in order to keep any referred-to GC
+  // things alive.
+  SafeBox* b = CustomObject::fromObject(obj)->ownedBox();
+  if (b) {
+    b->trace(trc);
+  }
+  b = CustomObject::fromObject(obj)->unownedBox();
+  if (b) {
+    b->trace(trc);
+  }
+}
+
+static bool CustomObjectExample(JSContext* cx) {
+  JS::RootedObject global(cx, boilerplate::CreateGlobal(cx));
+  if (!global) {
+    return false;
+  }
+
+  JSAutoRealm ar(cx, global);
+
+  SafeBox* box = new SafeBox();
+  static SafeBox eternalBox{};
+  JSObject* obj = CustomObject::create(cx, box, &eternalBox);
+  if (!obj) {
+    return false;
+  }
+
+  // The CustomObject will be collected, since it hasn't been stored anywhere
+  // else, and the SafeBox allocated just above will be destroyed.
+  JS_GC(cx);
+
+  return true;
+}
+////////////////////////////////////////////////////////////
+
 static bool TracingExample(JSContext* cx) {
   if (!CustomTypeExample(cx)) {
     return false;
@@ -155,6 +262,9 @@ static bool TracingExample(JSContext* cx) {
     return false;
   }
   if (!EmbeddingRootExample(cx)) {
+    return false;
+  }
+  if (!CustomObjectExample(cx)) {
     return false;
   }
 

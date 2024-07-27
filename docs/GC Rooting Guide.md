@@ -17,12 +17,12 @@ The main types of GC thing pointer are:
 - `JSObject*`
 - `JSString*`
 - `JSScript*`
-- `jsid`
+- `JS::PropertyKey (aka jsid)
 - `JSFunction*`
 - `JS::Symbol*`
 
-Note that `JS::Value` and `jsid` can contain pointers internally even
-though they are not a normal pointer type, hence their inclusion in this
+Note that `JS::Value` and `JS::PropertyKey` can contain pointers internally even
+though they are not normal pointer types, hence their inclusion in this
 list.
 
 If you use these types directly, or create classes, structs or arrays
@@ -42,33 +42,11 @@ if it were the underlying pointer.
 
 `JS::Rooted` must be constructed with a `JSContext*`, and optionally an initial value.
 
-There are typedefs available for the main types.
-Within SpiderMonkey, it is suggested that these are used in preference
-to the template class (Gecko uses the template versions):
+There are typedefs available for the main types, though they are now
+deprecated in both Gecko and SpiderMonkey. If you see eg `JS::RootedObject`,
+it is an alias for `JS::Rooted<JSObject*>`.
 
-| Template class            | Typedef              |
-| ------------------------- | -------------------- |
-| `JS::Rooted<JS::Value>`   | `JS::RootedValue`    |
-| `JS::Rooted<JSObject*>`   | `JS::RootedObject`   |
-| `JS::Rooted<JSString*>`   | `JS::RootedString`   |
-| `JS::Rooted<JSScript*>`   | `JS::RootedScript`   |
-| `JS::Rooted<jsid>`        | `JS::RootedId`       |
-| `JS::Rooted<JSFunction*>` | `JS::RootedFunction` |
-| `JS::Rooted<JS::Symbol*>` | `JS::RootedSymbol`   |
-
-For example, instead of this:
-
-```c++
-JSObject* localObj = JS_GetObjectOfSomeSort(cx);
-```
-
-You would write this:
-
-```c++
-JS::RootedObject localObj(cx, JS_GetObjectOfSomeSort(cx));
-```
-
-SpiderMonkey makes it easy to remember to use `JS::Rooted<T>` types
+SpiderMonkey makes it easy to remember to use the `JS::Rooted<T>` type
 instead of a raw pointer because all of the API methods that may GC take
 a `JS::Handle<T>`, as described below, and `JS::Rooted<T>` autoconverts
 to `JS::Handle<T>` but a bare pointer does not.
@@ -94,19 +72,6 @@ through an indirect reference.
 Like a reference, a `JS::Handle` is immutable: it can only ever refer to
 the `JS::Rooted<T>` that it was created for.
 
-Similarly to `JS::Rooted<T>`, there are typedefs available for the main
-types:
-
-| Template class            | Typedef              |
-| ------------------------- | -------------------- |
-| `JS::Handle<JS::Value>`   | `JS::HandleValue`    |
-| `JS::Handle<JSObject*>`   | `JS::HandleObject`   |
-| `JS::Handle<JSString*>`   | `JS::HandleString`   |
-| `JS::Handle<JSScript*>`   | `JS::HandleScript`   |
-| `JS::Handle<jsid>`        | `JS::HandleId`       |
-| `JS::Handle<JSFunction*>` | `JS::HandleFunction` |
-| `JS::Handle<JS::Symbol*>` | `JS::HandleSymbol`   |
-
 You should use `JS::Handle<T>` for all function parameters taking GC
 thing pointers (except out-parameters, which are described below).
 For example, instead of:
@@ -122,7 +87,7 @@ You should write:
 
 ```c++
 JSObject*
-someFunction(JSContext* cx, JS::HandleObject obj) {
+someFunction(JSContext* cx, JS::Handle<JSObject*> obj) {
     // ...
 }
 ```
@@ -145,19 +110,6 @@ address-of operator — on a `JS::Rooted<T>` instance.
 `JS::MutableHandle<T>` is exactly like a `JS::Handle<T>` except that it
 adds a `.set(T &t)` method and must be created from a `JS::Rooted<T>`
 explicitly.
-
-There are typedefs for `JS::MutableHandle<T>`, the same as for the other
-templates:
-
-| Template class                   | Typedef                     |
-| -------------------------------- | --------------------------- |
-| `JS::MutableHandle<JS::Value>`   | `JS::MutableHandleValue`    |
-| `JS::MutableHandle<JSObject*>`   | `JS::MutableHandleObject`   |
-| `JS::MutableHandle<JSString*>`   | `JS::MutableHandleString`   |
-| `JS::MutableHandle<JSScript*>`   | `JS::MutableHandleScript`   |
-| `JS::MutableHandle<jsid>`        | `JS::MutableHandleId`       |
-| `JS::MutableHandle<JSFunction*>` | `JS::MutableHandleFunction` |
-| `JS::MutableHandle<JS::Symbol*>` | `JS::MutableHandleSymbol`   |
 
 `JS::MutableHandle<T>` should be used for all out-parameters, for
 example instead of:
@@ -183,7 +135,7 @@ You should write:
 
 ```c++
 bool
-maybeGetValue(JSContext* cx, JS::MutableHandleValue valueOut) {
+maybeGetValue(JSContext* cx, JS::MutableHandle<JS::Value> valueOut) {
     // ...
     if (!wasError)
         valueOut.set(resultValue);
@@ -208,7 +160,7 @@ pointer must never be stored on the stack during a GC.
 
 ### AutoRooters ###
 
-GC thing pointers that appear as part of a stack-allocated aggregates
+GC thing pointers that appear as part of stack-allocated aggregates
 (array, structure, class, union) should use `JS::Rooted<T>` when
 possible.
 
@@ -262,10 +214,10 @@ use to get better performance at the cost of more complex code.
   the loop and re-using it on every iteration can save some cycles.
 - Raw pointers.
   If you are 100% sure that there is no way for SpiderMonkey to GC while
-  the pointer is on the stack, this is an option. Note: SpiderMonkey can
+  the pointer is on the stack, this is an option. Note: During any JSAPI
+  call, SpiderMonkey can
   GC because of any error, GC because of timers, GC because we are low
-  on memory, GC because of environment variables, GC because of cosmic
-  rays, etc.
+  on memory, GC because of environment variables, etc.
   This is not a terribly safe option for embedder code, so only consider
   this as a very last resort.
 
@@ -282,6 +234,7 @@ way**, and how to do that is explained below.
 That is, wrapping the value in `JS::Heap<T>` only protects the pointer
 from becoming invalid when the GC thing it points to gets moved.
 It does not protect the GC thing from being collected by the GC!
+Tracing is what protects from collection.
 
 `JS::Heap<T>` doesn't require a `JSContext*`, and can be constructed
 with or without an initial value parameter.
@@ -293,8 +246,6 @@ stack data is that a single structure containing GC thing pointers
 cannot be used on both the stack and the heap.
 In this case, separate structures must be created for the stack and the
 heap.
-
-There are currently no convenience typedefs for `JS::Heap<T>`.
 
 For example, instead of this:
 
@@ -316,6 +267,9 @@ struct HeapStruct
 };
 ```
 
+(Note that below you will find that you will probably want to define a `trace`
+method as well.)
+
 ### Tracing ###
 
 #### Simple JSClasses and Proxies ####
@@ -331,8 +285,8 @@ JSClass FooClass = {
     JSCLASS_HAS_PRIVATE | JSCLASS_HAS_RESERVED_SLOTS(1),
     &FooClassOps
 };
-JS::RootedObject obj(cx, JS_NewObject(cx, &FooClass));
-JS::RootedValue v(cx, JS::ObjectValue(*otherGCThing));
+JS::Rooted<JSObject*> obj(cx, JS_NewObject(cx, &FooClass));
+JS::Rooted<JS::Value> v(cx, JS::ObjectValue(*otherGCThing));
 js::SetReservedSlot(obj, 0, v);
 ```
 
@@ -351,7 +305,7 @@ The usual way is to define a
 which is already enough be able to create a `JS::Rooted<YourStruct>` on
 the stack — and then arrange for it to be called during tracing.
 If a pointer to your structure is stored in the private field of a
-JSObject, the usual way would be to define a trace hook on the JSObject
+JSObject, the usual way would be to define a trace hook on the JSClass
 (see above) that casts the private pointer to your structure and invokes
 `trace()` on it:
 
@@ -398,8 +352,8 @@ JS::PersistentRooted<MyOwningStruct> immortalStruct;
 But note that `JS::PersistentRooted` in a struct or class is a rather
 dangerous thing to use — it will keep a GC thing alive, and most GC
 things end up keeping their global alive, so if your class/struct is
-reachable in any way from that global, then nothing will ever be cleaned
-up by the GC.
+reachable in any way from that global, then nothing reachable from that
+global will ever be cleaned up by the GC.
 
 It's also possible to add a custom tracer using
 `JS_AddExtraGCRootsTracer()`.
@@ -436,16 +390,17 @@ With some settings the program gets extremely slow.
 ### Static rooting analysis ###
 
 The static rooting analysis uses a [GCC
-plugin](https://hg.mozilla.org/users/sfink_mozilla.com/sixgill) to dump
-possible callstacks that can cause GC and statically (at compile time)
+plugin](https://hg.mozilla.org/users/sfink_mozilla.com/sixgill) to
+gather information about types that can contain GC pointers and calls
+that can cause a GC, and will statically (at compile time)
 analyse this data for rooting hazards.
 
 The main differences to dynamic rooting analysis are:
 
-- Covers all compiled code at once during compile time. There's no need to actually execute these codepaths in the game.
+- Covers all compiled code at once during compile time. There's no need to actually execute these codepaths.
 - Setup is more complicated
 - Only covers stack based rooting
-- There can be false positives
+- There can be false positives (false alarms, where it will claim there is a situation that cannot actually arise)
 
 More information and instructions (possibly outdated) on [this wiki
 page](https://trac.wildfiregames.com/wiki/StaticRootingAnalysis).

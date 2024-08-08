@@ -71,6 +71,7 @@ executable('repl', 'examples/repl.cpp', 'examples/boilerplate.cpp', dependencies
 executable('tracing', 'examples/tracing.cpp', 'examples/boilerplate.cpp', dependencies: spidermonkey)
 executable('resolve', 'examples/resolve.cpp', 'examples/boilerplate.cpp', dependencies: [spidermonkey, zlib])
 executable('modules', 'examples/modules.cpp', 'examples/boilerplate.cpp', dependencies: [spidermonkey])
+executable('weakref', 'examples/weakref.cpp', 'examples/boilerplate.cpp', dependencies: spidermonkey)
 executable('worker', 'examples/worker.cpp', 'examples/boilerplate.cpp', dependencies: spidermonkey)
 executable('stencils', 'examples/stencils.cpp', 'examples/boilerplate.cpp', dependencies: spidermonkey)
 

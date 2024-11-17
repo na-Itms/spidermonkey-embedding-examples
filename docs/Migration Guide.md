@@ -43,6 +43,7 @@ This is a non-exhaustive list of minor API changes and renames.
   the standard C++ header `<tuple>` instead)
 - `mozilla::IsFinite()` → `std::isfinite()`
 - `mozilla::IsNaN()` → `std::isnan()`
+- `js::MovableCellHasher` → `js::StableCellHasher` ([bug 1832044](https://bugzilla.mozilla.org/show_bug.cgi?id=1832044))
 - Script filenames are now always encoded as UTF-8, see
   [this patch from bug 1492090](https://hg.mozilla.org/releases/mozilla-esr115/rev/416af93c3205460856a2cae7bee084a656ee2ee9)
 

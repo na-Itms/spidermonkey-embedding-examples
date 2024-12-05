@@ -34,9 +34,9 @@ stability.
 The master branch of SpiderMonkey experiences a fair amount of breaking
 changes unfortunately, driven by the needs of the Firefox browser.
 
-> **NOTE** Mozilla may be able to provide separate source packages for
-> SpiderMonkey in the future, but this is difficult for a number of
-> reasons.
+If you wish to generate a SpiderMonkey source tarball for vendoring it,
+you can run the script `js/src/make-source-package.py` available in the
+Firefox source.
 
 ## Building SpiderMonkey ##
 
